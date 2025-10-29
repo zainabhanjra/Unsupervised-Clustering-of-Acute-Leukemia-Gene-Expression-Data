@@ -1,0 +1,168 @@
+---
+title: "Unsupervised Learning"
+author: "Zainab Hanjra"
+date: "`r Sys.Date()`"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+### Preprocessing
+
+```{r cars,echo=FALSE,message=FALSE,warning=FALSE}
+# Load libraries
+library(readxl)
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(cluster)
+library(factoextra)
+library(caret)
+library(tidyverse)
+library(kableExtra)
+library(tibble)
+library(DataExplorer)
+
+# Load data
+train_data_raw <- read.csv("D:/STAT414/Clustering assignment/Gene expression data set/data_set_ALL_AML_train.csv")
+
+# Handle missing values
+train_data_clean <- train_data_raw %>% drop_na()
+
+introduce(train_data_clean)
+
+# Remove non-numeric columns if any (e.g., sample IDs, labels)
+train_data_numeric <- train_data_clean %>% select(where(is.numeric))
+
+# Scale the data
+scaled_data <- scale(train_data_numeric)
+```
+
+### Clustering
+
+a. K-means Clustering + Elbow Method
+
+```{r kmeans, echo=FALSE}
+# Determine optimal k
+fviz_nbclust(scaled_data, kmeans, method = "wss") +
+  labs(title = "Elbow Method for Optimal Clusters")
+
+# Apply k-means (replace k with the chosen number from elbow plot)
+set.seed(123)
+kmeans_result <- kmeans(scaled_data, centers = 2, nstart = 25)
+
+# Visualize clusters
+fviz_cluster(kmeans_result, data=scaled_data)
+```
+
+The Elbow plot clearly suggests an optimal k = 2.
+
+b. Hierarichal Clustering
+
+```{r hierarichal, echo=FALSE,fig.width=10, fig.height=10}
+
+# Set seed for reproducibility
+set.seed(123)
+
+# Sample 500 rows from the scaled dataset
+sample_indices <- sample(1:nrow(scaled_data), 500)
+subset_data <- scaled_data[sample_indices, ]
+
+# Compute distance matrix on the subset
+dist_subset <- dist(subset_data, method = "euclidean")
+
+# Perform hierarchical clustering
+hc.complete.sub <- hclust(dist_subset, method = "complete")
+hc.average.sub <- hclust(dist_subset, method = "average")
+hc.single.sub <- hclust(dist_subset, method = "single")
+
+# Plotting dendrograms for each linkage method
+par(mfrow = c(1, 1))  # 1 row, 1 column layout
+
+library(factoextra)
+fviz_nbclust(subset_data, FUN = hcut, method = "wss")
+
+#cutree(hc.complete.sub, 2)
+plot(hc.complete.sub, main = "Complete Linkage (Subset)", xlab = "", sub = "", labels = FALSE, cex = 0.6)
+rect.hclust(hc.complete.sub, k = 2)
+
+#cutree(hc.average.sub, 2)
+plot(hc.average.sub, main = "Average Linkage (Subset)", xlab = "", sub = "", labels = FALSE, cex = 0.6)
+rect.hclust(hc.average.sub, k = 2)
+
+#cutree(hc.single.sub, 2)
+plot(hc.single.sub, main = "Single Linkage (Subset)", xlab = "", sub = "", labels = FALSE, cex = 0.6)
+rect.hclust(hc.single.sub, k = 2)
+
+
+```
+
+
+The hierarchical clustering does not assume any particular cluster shape, making it suitable for identifying nested or uneven group sizes. A clear large vertical jump in linkage distance (height ≈ 40) indicates a natural separation into 2 clusters. This is consistent with the Elbow Method from K-means.
+
+
+### Dimensionality Reduction (PCA)
+
+```{r PCA, echo=FALSE}
+
+pr.out=prcomp(scaled_data, scale=TRUE)
+
+pr.var=pr.out$sdev^2
+
+pve=pr.var/sum(pr.var)
+
+plot(cumsum(pve), xlab="Principal Component", ylab="
+ Cumulative Proportion of Variance Explained", ylim=c(0,1),
+       type='b')
+
+plot(pve, xlab="Principal Component", ylab="Proportion of
+ Variance Explained", ylim=c(0,1),type='b')
+
+
+
+
+```
+
+The two scree plots indicate that the first principal component (PC1) explains more than 90% of the total variance, as seen in the scree plot showing individual variances where the first point is near the top of the variance axis (0.95), and all subsequent components contribute almost negligibly with variance values close to zero. This dominant role of PC1 suggests that the data has a highly one-dimensional structure. The second plot, which shows the cumulative proportion of variance explained, confirms this by reaching over 95% cumulative variance by just the first two components, and essentially plateauing by the third principal component. Beyond this point, the cumulative curve flattens out, indicating that additional components add little to no new explanatory power. Together, these results show that nearly all meaningful information in the dataset can be captured using just the first one to three principal components, making dimensionality reduction highly effective and minimizing the risk of information loss when reducing the dataset to a low-dimensional representation.
+
+```{r dfgd, echo=FALSE}
+
+biplot(pr.out, scale=0)
+
+```
+
+The PCA biplot, in conjunction with the scree plots, illustrates that the dataset has a strongly one-dimensional structure, with the first principal component (PC1) alone explaining over 90% of the total variance. This is evident in the biplot where most data points are spread primarily along the PC1 axis, forming a dense horizontal cluster, while PC2 contributes minimally to overall variance but reveals key deviations, such as the outlier X20 that stands out vertically.
+
+```{r vcsjjgh, echo=FALSE}
+### K-Means Clustering
+
+set.seed(123)
+
+# Get first 2 principal components
+pc_data <- data.frame(pr.out$x[, 1:2])  # Assuming pr.out is your PCA result
+
+# Perform K-means clustering with 2 clusters
+km.out <- kmeans(pc_data, centers = 2)
+
+# Add cluster assignment to PC data
+pc_data$Cluster <- as.factor(km.out$cluster)
+
+# Plot the PCA scatter plot with clusters
+plot(pc_data$PC1, pc_data$PC2,
+     col = pc_data$Cluster,
+     pch = 20, cex = 2,
+     xlab = "PC1", ylab = "PC2",
+     main = "PCA Scatter Plot Colored by K-Means Clusters")
+
+
+```
+
+This PCA scatter plot, colored by K-Means clusters, shows the data reduced to two principal components (PC1 and PC2) and partitioned into two distinct groups. The first cluster, represented by black points, is tightly grouped on the left side of the PC1 axis, indicating high similarity and low variance among those samples. The second cluster, shown in pink, is spread more broadly along PC1 on the right side, reflecting greater internal variation. The clear separation along the PC1 axis—consistent with the earlier finding that PC1 explains over 90% of the variance—indicates that PC1 effectively captures the primary source of differentiation between the two clusters. This strong linear separation confirms the dataset’s inherent one-dimensional structure and demonstrates how PCA, combined with K-Means, can successfully identify and visualize distinct groupings within high-dimensional data.
+
+
+### Interpretaion
+
+Both K-means and hierarchical clustering methods were applied to the dataset, and interestingly, both approaches consistently suggested the presence of two natural clusters. K-means clustering, using the Elbow Method, showed a clear inflection point at k = 2, indicating that two clusters best minimize the within-cluster sum of squares. Similarly, hierarchical clustering, visualized through a dendrogram, exhibited a significant vertical jump in linkage height around the same level, further supporting the two-cluster structure. While K-means is a partition-based method that assumes spherical clusters and works efficiently on large datasets, hierarchical clustering does not require any assumption about cluster shape and is better suited for uncovering nested or irregular cluster structures. Despite these methodological differences, the consistency in their results strongly suggests that the dataset contains a robust and well-defined natural grouping. This agreement enhances confidence in the clustering outcome, indicating that the structure observed is likely reflective of meaningful patterns within the data rather than artifacts of the chosen algorithm.
+
